@@ -1,0 +1,18 @@
+state 0;
+transfer on(" \t\n") skip;
+transfer on("abc") go(1) keep;
+transfer on("xyz") go(2) keep;
+transfer on(END) skip;
+transfer fail(0);
+
+state 1;
+transfer on(" \t\n") go(0) skip token(0);
+transfer on("abc") keep;
+transfer on(END) skip token(0);
+transfer fail(0);
+
+state 2;
+transfer on(" \t\n") go(0) skip token(0);
+transfer on("xyz") keep;
+transfer on(END) skip token(1);
+transfer fail(0);

@@ -1,0 +1,58 @@
+1.3E-44
+state 0;
+# skip white spaces
+  jump skip
+    on(" \n\t");
+  jump keep token(0)
+    on("(");
+  jump keep token(1)
+    on(")");
+  jump keep token(2)
+    on(",");
+  jump keep token(3)
+    on(";");
+# the number token
+  jump keep go(1)
+    on("0123456789");
+# the identifier token
+  jump keep go(2)
+    on("aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ_");
+# the string token
+  jump skip go(3)
+    on("\"");
+# the comment
+  jump skip go(5)
+    on("#");
+
+
+state 1;
+  jump keep
+    on("0123456789");
+  jump go(0) token(4);
+
+
+state 2;
+  jump keep
+    on("aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ_");
+  jump go(0) token(5);
+
+
+state 3;
+  jump failure(1)
+    on(END);
+  jump keep go(4)
+    on("\\");
+  jump keep go(0) token(6)
+    on("\"");
+
+
+state 4;
+  jump failure(1)
+    on(END);
+  jump keep go(3);
+
+
+state 5;
+  jump skip go(1e+5)
+    on("\n");
+  jump skip;

@@ -1,0 +1,72 @@
+state Begin:
+  transition skip
+    on(" \n\t");
+  transition keep token(left_paren)
+    on("(");
+  transition keep token(right_paren)
+    on(")");
+  transition keep token(left_bracket)
+    on("{");
+  transition keep token(right_bracket)
+    on("}");
+  transition keep token(comma)
+    on(",");
+  transition keep token(semicolon)
+    on(";");
+  transition keep go(Number)
+    on("0123456789");
+  transition keep go(Identifier)
+    on("aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ_");
+  transition skip go(String)
+    on("\"");
+  transition skip go(Comment)
+    on("#");
+  transition skip
+    on(end);
+;
+
+
+state Number:
+  transition keep
+    on("0123456789");
+  transition go(Begin) token(number);
+;
+
+
+state Identifier:
+  transition keep
+    on("aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ_");
+  transition keep
+    on("0123456789");
+  transition go(Begin) token(identifier);
+;
+
+
+state String:
+  transition failure("unexpected end : missing terminating character `\"`")
+    on(end);
+  transition skip go(StringEscape)
+    on("\\");
+  transition skip go(Begin) token(string)
+    on("\"");
+  transition keep;
+;
+
+
+state StringEscape:
+  transition failure("unexpected end : missing terminating character `\"`")
+    on(end);
+  transition keep go(String);
+;
+
+
+state Comment:
+  transition skip go(Begin)
+    on("\n");
+  transition skip;
+;
+
+
+state Begin:
+  transition skip;
+;

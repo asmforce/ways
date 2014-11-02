@@ -1,0 +1,36 @@
+state A:
+  transition on("0123") go(B);
+  transition on("4567") go(C);
+  transition on("89AB") go(D);
+  transition on("CDEF") go(E);
+  transition on("GHIJ") go(E);
+  transition on("KLMN") go(E);
+  transition on("OPQR") go(E);
+  transition on("STUV") go(E);
+  transition on("WXYZ") go(E);
+;
+
+
+state B:
+  transition on("34") go(B);
+  transition on("78") go(C);
+  transition on("BC") go(D);
+  transition on("FG") go(E);
+  transition on("JK") go(E);
+  transition on("NO") go(E);
+  transition on("RS") go(E);
+  transition on("VW") go(E);
+  transition on("Z0") go(E);
+;
+
+
+state C:
+;
+
+
+state D:
+;
+
+
+state E:
+;

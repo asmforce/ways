@@ -1,21 +1,9 @@
-#-------------------------------------------------
-#
-# Project created by QtCreator 2013-01-25T17:39:00
-#
-#-------------------------------------------------
-
-QT       -= core gui
-
-TARGET = ways
-CONFIG   += console
-CONFIG   -= app_bundle
-
 TEMPLATE = app
+CONFIG += console
+CONFIG -= app_bundle
+CONFIG -= qt
 
 INCLUDEPATH += ./include
 
-SOURCES += main.cpp \
-    notation.cpp
-
-HEADERS += \
-    notation.hpp
+SOURCES += main.cpp notation.cpp ways.cpp
+HEADERS += notation.hpp ways.hpp

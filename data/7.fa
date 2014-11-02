@@ -1,0 +1,34 @@
+state A:
+  transition on("0123456789") go(B);
+  transition on("abcdefghijklmnopqrstuvwxyz") go(C);
+  transition on("ABCDEFGHIJKLMNOPQRSTUVWXYZ") go(D);
+  transition on("!@#$%^&*(){}[]") go(E);
+;
+
+state B:
+  transition on("0123459") go(C);
+  transition on("abcdefghijklmnopqrsz") go(D);
+  transition on("ABCDEFGHIJKLMNOPQRSZ") go(E);
+  transition on("!@#$%^&]") go(A);
+;
+
+state C:
+  transition on("012389") go(D);
+  transition on("abcdefghijklmyz") go(E);
+  transition on("ABCDEFGHIJKLMYZ") go(A);
+  transition on("!@#$%[]") go(B);
+;
+
+state D:
+  transition on("01789") go(E);
+  transition on("abcdefxyz") go(A);
+  transition on("ABCDEFXYZ") go(B);
+  transition on("!@#}[]") go(C);
+;
+
+state E:
+  transition on("06789") go(A);
+  transition on("abcvwxyz") go(B);
+  transition on("ABCVWXYZ") go(C);
+  transition on("!{}[]") go(D);
+;

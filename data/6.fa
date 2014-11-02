@@ -1,0 +1,35 @@
+state A:
+  transition on("ABCDEFGHIJKLMNOPQRSTUVWXYZ") go(B);
+;
+
+state B:
+  transition on("ABC") go(C);
+;
+
+state C:
+  transition on("ABCDEF") go(D);
+;
+
+state D:
+  transition on("ABCDEFGHI") go(E);
+;
+
+state E:
+  transition on("ABCDEFGHIJKL") go(F);
+;
+
+state F:
+  transition on("ABCDEFGHIJKLMN") go(G);
+;
+
+state G:
+  transition on("ABCDEFGHIJKLMNOPQR") go(H);
+;
+
+state H:
+  transition on("ABCDEFGHIJKLMNOPQRSTU") go(I);
+;
+
+state I:
+  transition on("ABCDEFGHIJKLMNOPQRSTUVWX") go(A);
+;
