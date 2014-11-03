@@ -7,6 +7,7 @@ using namespace elib::aliases;
 
 #include <stack>
 #include <map>
+#include <set>
 #include <vector>
 #include <string>
 
@@ -29,7 +30,6 @@ private:
       optionSkip(false),
       optionToken(false),
       optionFailure(false),
-      optionEntry(false),
       onEos(false) {}
 
     public:
@@ -40,10 +40,9 @@ private:
       bool optionSkip;
       bool optionToken;
       bool optionFailure;
-      bool optionEntry;
 
       bool onEos;
-      std::string onChars;
+      std::set<char> onChars;
       std::string goState;
       std::string tokenName;
       std::string failureMessage;
@@ -73,13 +72,12 @@ private:
       };
 
     public:
-      Transition() : state(0), action(ActionInvalid), mode(ModeLeave), entry(false), arg(0) {}
+      Transition() : state(0), action(ActionInvalid), mode(ModeLeave), arg(0) {}
 
     public:
       u32 state;
       u8 action;
       u8 mode;
-      bool entry;
       u32 arg;
     };
 
@@ -92,9 +90,12 @@ private:
     **/
     static const u32 charsetSize;
 
+    static const u32 INVALID_ID;
+
+    static const char *KEYWORD_INITIAL;
+    static const char *KEYWORD_STATE;
     static const char *KEYWORD_ON;
     static const char *KEYWORD_GO;
-    static const char *KEYWORD_ENTRY;
     static const char *KEYWORD_KEEP;
     static const char *KEYWORD_SKIP;
     static const char *KEYWORD_CLEAR;
@@ -122,7 +123,7 @@ private:
      * <convention>@definition must be empty</convention>
      * <convention>@stateMap must be empty</convention>
     **/
-    static bool parse(std::istream &in, std::map<std::string, u32> &stateMap, std::vector<RuleGroup> &definition);
+    static bool parse(std::istream &in, std::map<std::string, u32> &stateMap, std::vector<RuleGroup> &definition, u32 &initialStateId);
 
     /**
      * Prints out a human-readable representation of the specified character

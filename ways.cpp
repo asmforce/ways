@@ -21,9 +21,12 @@ using namespace elib::aliases;
 
 const u32 Ways::charsetSize = 256;
 
+const u32 Ways::INVALID_ID = u32(-1);
+
+const char *Ways::KEYWORD_INITIAL = "initial";
+const char *Ways::KEYWORD_STATE = "state";
 const char *Ways::KEYWORD_ON = "on";
 const char *Ways::KEYWORD_GO = "go";
-const char *Ways::KEYWORD_ENTRY = "entry";
 const char *Ways::KEYWORD_KEEP = "keep";
 const char *Ways::KEYWORD_SKIP = "skip";
 const char *Ways::KEYWORD_CLEAR = "clear";
@@ -38,11 +41,13 @@ const char Ways::DELIM_LPAREN = '(';
 const char Ways::DELIM_RPAREN = ')';
 
 
-bool Ways::parse(std::istream &in, std::map<std::string, u32> &stateMap, std::vector<RuleGroup> &definition) {
+bool Ways::parse(std::istream &in, std::map<std::string, u32> &stateMap, std::vector<RuleGroup> &definition, u32 &initialStateId) {
     notation::source src(in);
     u32 line, column;
 
-    while (src >> notation::ws() >> notation::pos(line, column) >> notation::keyword("state") >> true) {
+    initialStateId = INVALID_ID;
+
+    while (src >> notation::ws() >> notation::pos(line, column) >> notation::keyword(KEYWORD_STATE) >> true) {
       std::string stateName;
       u32 stateId;
 
@@ -54,8 +59,15 @@ bool Ways::parse(std::istream &in, std::map<std::string, u32> &stateMap, std::ve
       }
       DEBUG_PRINTLN("state name `" << stateName << "` at <" << line << ';' << column << '>');
 
+#ifdef DEBUG
       if (stateMap.count(stateName) > 0) {
         DEBUG_PRINTLN("redefinition of state `" << stateName << "` at <" << line << ';' << column << '>');
+      }
+#endif
+
+      bool isInitial = false;
+      if (src >> notation::ws() >> notation::keyword(KEYWORD_INITIAL) >> true) {
+        isInitial = true;
       }
 
       if (src >> notation::pos(line, column) >> notation::ws() >> notation::delim(DELIM_COLON) >> false) {
@@ -63,20 +75,36 @@ bool Ways::parse(std::istream &in, std::map<std::string, u32> &stateMap, std::ve
         return false;
       }
 
-      src >> notation::pos(line, column); // for debug only
-      DEBUG_PRINTLN(std::endl << std::endl << std::endl << "state `" << stateName << "` declaration opened at <" << line << ';' << column << '>');
+      src >> notation::pos(line, column); // For debug only
+      DEBUG_PRINTLN(std::endl << std::endl << "state `" << stateName << "` declaration opened at <" << line << ';' << column << '>');
 
-      // find RuleGroup corresponding to state_name or create a new one
+      // Find RuleGroup corresponding to state_name or create a new one
       if (stateMap.count(stateName)) {
         stateId = stateMap[stateName];
       } else {
-        definition.push_back(RuleGroup());
-        definition.back().stateName = stateName;
+        RuleGroup group;
+        group.stateName = stateName;
+        definition.push_back(group);
         stateId = definition.size() - 1;
         stateMap[stateName] = stateId;
       }
 
-      std::vector<Rule> &rules = definition[stateId].rules;
+      RuleGroup &group = definition[stateId];
+      std::vector<Rule> &rules = group.rules;
+
+      if (isInitial) {
+        DEBUG_PRINTLN("this one is initial");
+        if (initialStateId != INVALID_ID && stateId != initialStateId) {
+          std::cerr << "error: state `" << definition[initialStateId].stateName << "` was earlier declared as initial" << std::endl;
+          return false;
+        }
+        initialStateId = stateId;
+      }
+#ifdef DEBUG
+      else if (stateId == initialStateId) {
+        DEBUG_PRINTLN("this one is initial");
+      }
+#endif
 
       while (src >> notation::ws() >> notation::keyword(KEYWORD_TRANSITION) >> notation::pos(line, column) >> true) {
         rules.push_back(Rule());
@@ -105,13 +133,20 @@ bool Ways::parse(std::istream &in, std::map<std::string, u32> &stateMap, std::ve
               return false;
             }
 
+            std::string onChars;
             src >> notation::pos(line, column) >> notation::ws();
-            if (src >> notation::keyword(KEYWORD_END) >> true)
-            {
+            if (src >> notation::keyword(KEYWORD_END) >> true) {
               DEBUG_PRINTLN("on(end)");
               rule.onEos = true;
-            } else if (src >> notation::str(rule.onChars) >> true) {
-              DEBUG_PRINTLN("on(\"" << rule.onChars << "\")");
+            } else if (src >> notation::str(onChars) >> true) {
+              rule.onChars.insert(onChars.begin(), onChars.end());
+#ifdef DEBUG
+              std::stringstream stringStream;
+              for (u32 i = 0; i < onChars.length(); ++i) {
+                escape(stringStream, onChars[i]);
+              }
+              DEBUG_PRINTLN("on(\"" << stringStream.str() << "\")");
+#endif
             }
 
             if (rule.onEos == false && rule.onChars.empty()) {
@@ -147,12 +182,6 @@ bool Ways::parse(std::istream &in, std::map<std::string, u32> &stateMap, std::ve
               std::cerr << "error: missing expected right parenthesis since <" << line << ';' << column << '>' << std::endl;
               return false;
             }
-          } else if (optionName == KEYWORD_ENTRY) {
-            if (rule.optionEntry == true) {
-              std::cerr << "warning: redefinition of option `entry` at <" << line << ';' << column << "> since <" << rule.line << ';' << rule.column << '>' << std::endl;
-            }
-
-            rule.optionEntry = true;
           } else if (optionName == KEYWORD_KEEP) {
             if (rule.optionKeep == true) {
               std::cerr << "warning: redefinition of option `keep` at <" << line << ';' << column << "> since <" << rule.line << ';' << rule.column << '>' << std::endl;
@@ -229,14 +258,14 @@ bool Ways::parse(std::istream &in, std::map<std::string, u32> &stateMap, std::ve
           std::cerr << "error: missing expected transition option or semicolon since <" << line << ';' << column << '>' << std::endl;
           return false;
         }
-        DEBUG_PRINTLN("transition (from state `" << stateName << "`) declaration closed at <" << line << ';' << column+1 << '>');
+        DEBUG_PRINTLN("transition (from state `" << stateName << "`) declaration closed at <" << line << ';' << column << '>');
       }
 
       if (src >> notation::ws() >> notation::pos(line, column) >> notation::delim(DELIM_SEMICOLON) >> false) {
         std::cerr << "error: missing expected semicolon before <" << line << ';' << column << '>' << std::endl;
         return false;
       }
-      DEBUG_PRINTLN("state `" << stateName << "` declaration closed at <" << line << ';' << column+1 << '>');
+      DEBUG_PRINTLN("state `" << stateName << "` declaration closed at <" << line << ';' << column << '>');
     }
 
     if (src.end()) {
@@ -247,7 +276,7 @@ bool Ways::parse(std::istream &in, std::map<std::string, u32> &stateMap, std::ve
         return false;
       }
     } else {
-      std::cerr << "error: missing expected keyword `state` at <" << line << ';' << column << '>' << std::endl;
+      std::cerr << "error: missing declaration at <" << line << ';' << column << '>' << std::endl;
       return false;
     }
 }
@@ -256,17 +285,20 @@ bool Ways::parse(std::istream &in, std::map<std::string, u32> &stateMap, std::ve
 bool Ways::translate(std::istream &in, std::ostream &out) {
   std::map<std::string, u32> stateMap;
   std::vector<RuleGroup> definition;
+  u32 initialStateId;
 
-  if (false == parse(in, stateMap, definition))
+  if (false == parse(in, stateMap, definition, initialStateId))
     return false;
 
-  //std::vector<std::string> failureMessages;
-  //std::vector<std::string> tokenNames;
+  std::vector<std::string> tokens;
+  std::map<std::string, u32> tokenMap;
+  std::vector<std::string> failureMessages;
+  std::map<std::string, u32> failureMap;
 
-  // direct mapping characters into cclasses
+  // Direct mapping characters into cclasses
   u8 classMap[charsetSize];
   u16 classUsage[charsetSize];
-  // cclass id 0 is reserved, it represents unallocated characters
+  // Class id 0 is reserved, it represents unallocated characters
   u8 maxClassId = 0;
 
   std::fill_n(classMap, charsetSize, u8(0));
@@ -287,8 +319,8 @@ bool Ways::translate(std::istream &in, std::ostream &out) {
 
     DEBUG_PRINTLN("new state (rules group): " << group.stateName);
 
-    for (u32 i = 0; i < rules.size(); ++i) {
-      Rule &rule = rules[i];
+    for (u32 ruleId = 0; ruleId < rules.size(); ++ruleId) {
+      Rule &rule = rules[ruleId];
 
       bool charsUsage[charsetSize];
       std::fill_n(charsUsage, charsetSize, false);
@@ -301,7 +333,6 @@ bool Ways::translate(std::istream &in, std::ostream &out) {
       }
 
       if (rule.optionOn) {
-        std::set<char> chars(rule.onChars.begin(), rule.onChars.end());
         u8 relocations[charsetSize];
 
         std::fill_n(relocations, charsetSize, u8(0));
@@ -309,14 +340,17 @@ bool Ways::translate(std::istream &in, std::ostream &out) {
 #ifdef DEBUG
         {
           std::stringstream stringStream;
-          for (u32 i = 0; i < rule.onChars.length(); ++i) {
-            escape(stringStream, rule.onChars[i]);
+          for (std::set<char>::iterator i = rule.onChars.begin(); i != rule.onChars.end(); i++) {
+            escape(stringStream, *i);
+          }
+          if (rule.onEos) {
+            stringStream << KEYWORD_END;
           }
           DEBUG_PRINTLN("on(`" << stringStream.str() << "`)");
         }
 #endif
 
-        for (std::set<char>::iterator i = chars.begin(); i != chars.end(); i++) {
+        for (std::set<char>::iterator i = rule.onChars.begin(); i != rule.onChars.end(); i++) {
           u8 c = *i;
 
           if (charsUsage[c]) {
@@ -350,14 +384,26 @@ bool Ways::translate(std::istream &in, std::ostream &out) {
         }
 
         // Flush relocations
-        for (std::set<char>::iterator i = chars.begin(); i != chars.end(); i++) {
+        for (std::set<char>::iterator i = rule.onChars.begin(); i != rule.onChars.end(); i++) {
           u8 &cclassId = classMap[u8(*i)];
           cclassId = relocations[cclassId];
         }
 
-        // Если больше нет необходимости хранить оригинальные строки, то лучше сразу
-        //   их удалить, чтобы сэкономить лишний килобайт памяти
-        //rl.on_chars.clear();
+#ifdef DEBUG
+        {
+          for (u32 clazz = 1; clazz < 256; clazz++) {
+            if (classUsage[clazz] > 0) {
+              std::stringstream stringStream;
+              for (u32 c = 0; c < 256; c++) {
+                if (classMap[c] == clazz) {
+                  escape(stringStream, c);
+                }
+              }
+              DEBUG_PRINTLN(clazz << ": \"" << stringStream.str() << "\"");
+            }
+          }
+        }
+#endif
       } else {
         DEBUG_PRINTLN("used as default");
         if (hasDefaultRule) {
@@ -366,27 +412,176 @@ bool Ways::translate(std::istream &in, std::ostream &out) {
         }
         hasDefaultRule = true;
       }
-
-#ifdef DEBUG
-    {
-      for (u32 clazz = 1; clazz < 256; clazz++) {
-        if (classUsage[clazz] > 0) {
-          std::stringstream stringStream;
-          for (u32 c = 0; c < 256; c++) {
-            if (classMap[c] == clazz) {
-              escape(stringStream, c);
-            }
-          }
-          DEBUG_PRINTLN(clazz << ": \"" << stringStream.str() << "\"");
-        }
-      }
-    }
-#endif
     }
   }
 
+  const u32 stateCount = stateMap.size();
+  // All allocated classes + unallocated characters class + eos
+  const u32 classCount = maxClassId + 2;
 
-  DEBUG_PRINTLN(std::endl << std::endl);
+  std::vector< std::vector<Transition> > transitions(stateCount);
+
+  DEBUG_PRINTLN("now we have " << stateCount << " state(s) and " << classCount << " class(es)");
+
+  for (u32 stateId = 0; stateId < stateCount; ++stateId) {
+    RuleGroup &group = definition[stateId];
+    std::vector<Rule> &rules = group.rules;
+
+    transitions[stateId].resize(classCount);
+
+    Transition defaultTransition;
+    bool hasDefaultRule = false;
+    std::set<u8> defaultClasses;
+
+    // Universal set for now
+    for (u32 clazz = 0; clazz < classCount; ++clazz) {
+      defaultClasses.insert(clazz);
+    }
+
+    for (u32 ruleId = 0; ruleId < rules.size(); ++ruleId) {
+      Rule &rule = rules[ruleId];
+      Transition transition;
+
+      // Default values
+      transition.action = Transition::ActionContinue;
+      transition.mode = Transition::ModeLeave;
+      transition.state = stateId;
+
+      if (rule.optionFailure) {
+        transition.action = Transition::ActionFailure;
+        if (rule.optionGo || rule.optionClear || rule.optionToken) {
+          std::cerr << "error: option `failure` is incompatible with `go`, `clear` and `token` options of transition (state `" << group.stateName << "`) at <" << rule.line << ';' << rule.column << '>' << std::endl;
+          return false;
+        }
+
+        u32 failureId;
+        if (failureMap.count(rule.failureMessage)) {
+          failureId = failureMap[rule.failureMessage];
+        } else {
+          failureMessages.push_back(rule.failureMessage);
+          failureId = failureMessages.size() - 1;
+          failureMap[rule.failureMessage] = failureId;
+        }
+        transition.arg = failureId;
+      }
+
+      if (rule.optionGo) {
+        u32 nextStateId;
+        if (stateMap.count(rule.goState)) {
+          nextStateId = stateMap[rule.goState];
+        } else {
+          std::cerr << "error: unknown next state `" << rule.goState << "` transition at <" << rule.line << ";" << rule.column << ">" << std::endl;
+          return false;
+        }
+        transition.state = nextStateId;
+      }
+
+      if (rule.optionToken) {
+        transition.action = Transition::ActionToken;
+        if (rule.optionClear) {
+          std::cerr << "error: option `token` is incompatible with `clear` option of transition (state `" << group.stateName << "`) at <" << rule.line << ';' << rule.column << '>' << std::endl;
+          return false;
+        }
+
+        u32 tokenId;
+        if (tokenMap.count(rule.tokenName)) {
+          tokenId = tokenMap[rule.tokenName];
+        } else {
+          tokens.push_back(rule.tokenName);
+          tokenId = tokens.size() - 1;
+          tokenMap[rule.tokenName] = tokenId;
+        }
+        transition.arg = tokenId;
+      }
+
+      if (rule.optionClear) {
+        transition.action = Transition::ActionClear;
+      }
+
+      if (rule.optionKeep) {
+        transition.mode = Transition::ModeKeep;
+        if (rule.optionSkip) {
+          std::cerr << "error: option `keep` is incompatible with `keep` option of transition (state `" << group.stateName << "`) at <" << rule.line << ';' << rule.column << '>' << std::endl;
+          return false;
+        }
+      }
+
+      if (rule.optionSkip) {
+        transition.mode = Transition::ModeSkip;
+      }
+
+      if (rule.optionOn) {
+        std::set<u8> classes;
+        for (std::set<char>::const_iterator i = rule.onChars.begin(); i != rule.onChars.end(); i++) {
+          classes.insert(classMap[u8(*i)]);
+        }
+        if (rule.onEos) {
+          // Eos is represented by a class with maximum id
+          classes.insert(classCount-1);
+        }
+        for (std::set<u8>::const_iterator i = classes.begin(); i != classes.end(); i++) {
+          transitions[stateId][*i] = transition;
+          defaultClasses.erase(*i);
+        }
+      } else {
+        hasDefaultRule = true;
+        defaultTransition = transition;
+      }
+    }
+
+    if (hasDefaultRule) {
+      for (std::set<u8>::const_iterator i = defaultClasses.begin(); i != defaultClasses.end(); i++) {
+        transitions[stateId][*i] = defaultTransition;
+      }
+    }
+  }
+
+  out << "const u32 charsetSize = " << charsetSize << ';' << std::endl;
+
+  out << "const u8 classMap[charsetSize] = {";
+  for (u32 i = 0; i < charsetSize; ++i) {
+    out << u32(classMap[i]) << (i == charsetSize-1 ? "" : ", ");
+  }
+  out << "};" << std::endl << std::endl;
+
+  if (!failureMessages.empty()) {
+    out << "const char *failureMessages[] = {" << std::endl;
+    for (u32 i = 0; i < failureMessages.size(); ++i) {
+      std::string &message = failureMessages[i];
+      out << "  \"";
+      for (u32 j = 0; j < message.length(); ++j) {
+        escape(out, message[j]);
+      }
+      out << "\"" << (i == failureMessages.size()-1 ? "" : ",") << std::endl;
+    }
+    out << "};" << std::endl << std::endl;
+  }
+
+  if (!tokens.empty()) {
+    out << "struct Tokens {" << std::endl;
+    out << "  enum {" << std::endl;
+    for (u32 i = 0; i < tokens.size(); ++i) {
+      out << "    " << tokens[i] << (i == tokens.size()-1 ? "" : ",") << std::endl;
+    }
+    out << "  }" << std::endl << "};" << std::endl << std::endl;
+  }
+
+  if (initialStateId == INVALID_ID) {
+    initialStateId = 0;
+  }
+  out << "const u32 initialStateId = " << initialStateId << ';' << std::endl;
+
+  out << "const Transition transitions[][] = {" << std::endl;
+  for (u32 stateId = 0; stateId < stateCount; ++stateId) {
+    std::vector<Transition> &row = transitions[stateId];
+    out << "  {";
+    for (u32 classId = 0; classId < classCount; ++classId) {
+      Transition &tr = row[classId];
+      out << '{' << tr.state << ", " << u32(tr.action) << ", " << u32(tr.mode) << ", " << tr.arg << (classId == classCount-1 ? "}" : "), ");
+    }
+    out << (stateId == stateCount-1 ? "}" : "),") << std::endl;
+  }
+  out << "};" << std::endl;
 
   return true;
 }
@@ -413,7 +608,7 @@ void Ways::escape(std::ostream &out, u8 c) {
         break;
 
       default:
-        out << "\\d{" << u32(c) << '}';
+        out << "\\x" << std::hex << u32(c) << std::dec;
       }
     } else {
       switch ((char) c) {
