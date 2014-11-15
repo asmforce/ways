@@ -536,52 +536,98 @@ bool Ways::translate(std::istream &in, std::ostream &out) {
     }
   }
 
-  out << "const u32 charsetSize = " << charsetSize << ';' << std::endl;
+  out << "#include <elib/aliases.hpp>" << std::endl << std::endl;
 
-  out << "const u8 classMap[charsetSize] = {";
-  for (u32 i = 0; i < charsetSize; ++i) {
-    out << u32(classMap[i]) << (i == charsetSize-1 ? "" : ", ");
+  out << "namespace Ways {" << std::endl;
+  out << "  using namespace elib::aliases;" << std::endl << std::endl;
+
+  out << "  const u32 charsetSize = " << charsetSize << ';' << std::endl;
+  out << "  const u32 classCount = " << classCount << ';' << std::endl;
+  out << "  const u32 stateCount = " << stateCount << ';' << std::endl;
+  if (initialStateId == INVALID_ID) {
+    initialStateId = 0;
   }
-  out << "};" << std::endl << std::endl;
+  out << "  const u32 initialStateId = " << initialStateId << ';' << std::endl << std::endl;
+
+  out << "  const u8 classMap[charsetSize] = {";
+  for (u32 i = 0; i < charsetSize; ++i) {
+    const u8 clazz = classMap[i];
+    if (i % 16 == 0) {
+      out << std::endl << "    ";
+    }
+    if (clazz < 100) {
+      if (clazz < 10) {
+        out << "   ";
+      } else {
+        out << "  ";
+      }
+    } else {
+      out << ' ';
+    }
+    out << u32(clazz) << (i == charsetSize-1 ? "" : ",");
+  }
+  out << std::endl << "  };" << std::endl << std::endl;
 
   if (!failureMessages.empty()) {
-    out << "const char *failureMessages[] = {" << std::endl;
+    out << "  const char *failureMessages[] = {" << std::endl;
     for (u32 i = 0; i < failureMessages.size(); ++i) {
       std::string &message = failureMessages[i];
-      out << "  \"";
+      out << "    \"";
       for (u32 j = 0; j < message.length(); ++j) {
         escape(out, message[j]);
       }
       out << "\"" << (i == failureMessages.size()-1 ? "" : ",") << std::endl;
     }
-    out << "};" << std::endl << std::endl;
+    out << "  };" << std::endl << std::endl;
   }
 
   if (!tokens.empty()) {
-    out << "struct Tokens {" << std::endl;
-    out << "  enum {" << std::endl;
+    out << "  struct Tokens {" << std::endl;
+    out << "    enum {" << std::endl;
     for (u32 i = 0; i < tokens.size(); ++i) {
-      out << "    " << tokens[i] << (i == tokens.size()-1 ? "" : ",") << std::endl;
+      out << "      " << tokens[i] << (i == tokens.size()-1 ? "" : ",") << std::endl;
     }
-    out << "  }" << std::endl << "};" << std::endl << std::endl;
+    out << "    };" << std::endl << "  };" << std::endl << std::endl;
   }
 
-  if (initialStateId == INVALID_ID) {
-    initialStateId = 0;
-  }
-  out << "const u32 initialStateId = " << initialStateId << ';' << std::endl;
+  out << "  struct Transition {" << std::endl
+      << "  public:" << std::endl
+      << "    enum {" << std::endl
+      << "      ActionInvalid," << std::endl
+      << "      ActionContinue," << std::endl
+      << "      ActionClear," << std::endl
+      << "      ActionToken," << std::endl
+      << "      ActionFailure" << std::endl
+      << "    };" << std::endl
+      << std::endl
+      << "    enum {" << std::endl
+      << "      ModeLeave," << std::endl
+      << "      ModeKeep," << std::endl
+      << "      ModeSkip" << std::endl
+      << "    };" << std::endl
+      << "  " << std::endl
+      << "  public:" << std::endl
+      << "    Transition() : state(0), action(ActionInvalid), mode(ModeLeave), arg(0) {}" << std::endl
+      << std::endl
+      << "  public:" << std::endl
+      << "    u32 state;" << std::endl
+      << "    u8 action;" << std::endl
+      << "    u8 mode;" << std::endl
+      << "    u32 arg;" << std::endl
+      << "  };" << std::endl << std::endl;
 
-  out << "const Transition transitions[][] = {" << std::endl;
+  out << "  const Transition transitions[][] = {" << std::endl;
   for (u32 stateId = 0; stateId < stateCount; ++stateId) {
     std::vector<Transition> &row = transitions[stateId];
-    out << "  {";
+    out << "    {";
     for (u32 classId = 0; classId < classCount; ++classId) {
       Transition &tr = row[classId];
-      out << '{' << tr.state << ", " << u32(tr.action) << ", " << u32(tr.mode) << ", " << tr.arg << (classId == classCount-1 ? "}" : "), ");
+      out << "{" << tr.state << ", " << u32(tr.action) << ", " << u32(tr.mode) << ", " << tr.arg << (classId == classCount-1 ? "}" : "}, ");
     }
-    out << (stateId == stateCount-1 ? "}" : "),") << std::endl;
+    out << (stateId == stateCount-1 ? "}" : "},") << std::endl;
   }
-  out << "};" << std::endl;
+  out << "  };" << std::endl;
+  out << "}  // namespace" << std::endl;
 
   return true;
 }
